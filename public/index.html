@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Apfel Harness</title>
+<link rel="stylesheet" href="styles.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='12' cy='14' r='8' fill='%23ffb454'/><path d='M12 6c0-3 2-4 3-4' stroke='%239bc46b' stroke-width='2' fill='none'/></svg>">
+</head>
+<body>
+
+<header class="bar">
+  <div class="brand">
+    <svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true">
+      <circle cx="12" cy="14" r="8" fill="var(--lamp)"/>
+      <path d="M12 6.5c0-2.8 1.8-4 3.2-4.2" stroke="var(--ok)" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+    </svg>
+    <span class="brand-name">apfel<em>harness</em></span>
+  </div>
+
+  <nav class="modes" role="tablist" aria-label="Mode">
+    <button class="mode is-active" data-mode="chat" role="tab" aria-selected="true">Chat</button>
+    <button class="mode" data-mode="json" role="tab" aria-selected="false">JSON</button>
+    <button class="mode" data-mode="tools" role="tab" aria-selected="false">Tools</button>
+  </nav>
+
+  <div class="status">
+    <span class="lamp" id="lamp" data-state="starting" title="apfel status"></span>
+    <span class="status-text mono" id="status-text">starting…</span>
+    <button class="ghost" id="btn-restart" title="Restart the apfel server">Restart</button>
+    <button class="ghost" id="btn-tune" aria-expanded="false" title="Tuning panel">Tune</button>
+  </div>
+</header>
+
+<main class="stage">
+  <!-- CHAT -->
+  <section class="view is-active" id="view-chat">
+    <div class="transcript" id="transcript">
+      <div class="empty" id="empty-state">
+        <svg class="empty-mark" viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="14" r="8" fill="none" stroke="var(--lamp)" stroke-width="1.2"/>
+          <path d="M12 6.5c0-2.8 1.8-4 3.2-4.2" stroke="var(--ok)" stroke-width="1.4" fill="none" stroke-linecap="round"/>
+        </svg>
+        <h1>On-device Apple Intelligence</h1>
+        <p>A 4,096-token window, running entirely on this Mac. The gauge below shows exactly who is spending it.</p>
+        <div class="starters">
+          <button class="starter">Summarize this in three bullets: </button>
+          <button class="starter">Explain what this shell command does: </button>
+          <button class="starter">Draft a short, plain reply to: </button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- JSON -->
+  <section class="view" id="view-json">
+    <div class="split">
+      <div class="pane">
+        <label class="eyebrow" for="json-prompt">Prompt</label>
+        <textarea id="json-prompt" spellcheck="false" placeholder="Extract every person mentioned in this text: …"></textarea>
+        <label class="eyebrow" for="json-schema">JSON schema — output is guaranteed to match</label>
+        <textarea id="json-schema" class="mono" spellcheck="false"></textarea>
+        <div class="row">
+          <button class="primary" id="json-run">Generate JSON</button>
+          <span class="hint" id="json-hint"></span>
+        </div>
+      </div>
+      <div class="pane">
+        <div class="row space">
+          <label class="eyebrow">Result</label>
+          <span class="row">
+            <span class="badge" id="json-valid" hidden>valid JSON</span>
+            <button class="ghost" id="json-copy" hidden>Copy</button>
+          </span>
+        </div>
+        <pre class="result mono" id="json-result">Constrained decoding: the model cannot produce output that violates the schema.</pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- TOOLS -->
+  <section class="view" id="view-tools">
+    <p class="tools-intro">One-shot utilities from apfel's bundled demos, no context carried between runs.</p>
+    <div class="tools" id="tools"></div>
+  </section>
+
+  <!-- TUNING DRAWER -->
+  <aside class="tuning" id="tuning" hidden>
+    <h2 class="eyebrow">Tuning</h2>
+
+    <label class="field">
+      <span>System prompt <em class="mono" id="sys-tokens"></em></span>
+      <textarea id="cfg-system" rows="3" placeholder="Optional. Counts against the window — the gauge shows its cost."></textarea>
+    </label>
+
+    <label class="field">
+      <span>Temperature <em class="mono" id="temp-val">0.7</em></span>
+      <input type="range" id="cfg-temperature" min="0" max="2" step="0.1" value="0.7">
+    </label>
+
+    <label class="field">
+      <span>Max response tokens <em class="mono" id="maxtok-val">512</em></span>
+      <input type="range" id="cfg-maxtokens" min="64" max="2048" step="64" value="512">
+    </label>
+
+    <label class="field">
+      <span>Top-p (blank = default)</span>
+      <input type="number" id="cfg-topp" min="0.05" max="1" step="0.05" placeholder="—">
+    </label>
+
+    <label class="field">
+      <span>Seed (blank = random)</span>
+      <input type="number" id="cfg-seed" step="1" placeholder="—">
+    </label>
+
+    <label class="field">
+      <span>When the window overflows</span>
+      <select id="cfg-strategy">
+        <option value="newest-first">Keep newest turns (default)</option>
+        <option value="oldest-first">Keep oldest turns</option>
+        <option value="sliding-window">Sliding window (last N turns)</option>
+        <option value="summarize">Summarize older turns</option>
+        <option value="strict">Refuse — error on overflow</option>
+      </select>
+    </label>
+
+    <label class="field" id="field-maxturns" hidden>
+      <span>Window size <em class="mono" id="turns-val">8 turns</em></span>
+      <input type="range" id="cfg-maxturns" min="2" max="32" step="1" value="8">
+    </label>
+
+    <div class="tuning-actions">
+      <button class="ghost" id="btn-clear">Clear conversation</button>
+    </div>
+    <p class="hint">Settings save automatically and apply to the next message.</p>
+  </aside>
+</main>
+
+<!-- DECK: gauge + composer (chat mode) -->
+<footer class="deck" id="deck">
+  <div class="gauge" id="gauge" title="Context window">
+    <div class="gauge-ruler" id="gauge-ruler"></div>
+    <div class="gauge-track">
+      <div class="gauge-seg seg-system" id="seg-system" title="System prompt"></div>
+      <div class="gauge-seg seg-history" id="seg-history" title="Conversation history"></div>
+      <div class="gauge-seg seg-draft" id="seg-draft" title="Your draft"></div>
+      <div class="gauge-seg seg-reserve" id="seg-reserve" title="Reserved for the response (max response tokens)"></div>
+    </div>
+    <div class="gauge-meta">
+      <span class="legend mono">
+        <i class="k k-system"></i>system
+        <i class="k k-history"></i>history
+        <i class="k k-draft"></i>draft
+        <i class="k k-reserve"></i>reserve
+      </span>
+      <span class="readout mono" id="readout">0 / 4,096</span>
+    </div>
+  </div>
+
+  <div class="attach-row" id="attach-row" hidden></div>
+
+  <div class="composer">
+    <textarea id="input" rows="1" placeholder="Message the on-device model…  (Enter to send, Shift+Enter for a new line)"></textarea>
+    <div class="composer-actions">
+      <input type="file" id="file-input" hidden multiple>
+      <button class="ghost" id="btn-attach" title="Attach a text file — its full content joins the prompt">Attach</button>
+      <button class="ghost" id="btn-stop" hidden>Stop</button>
+      <button class="primary" id="btn-send">Send</button>
+    </div>
+  </div>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
