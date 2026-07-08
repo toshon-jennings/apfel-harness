@@ -21,10 +21,12 @@
   <nav class="modes" role="tablist" aria-label="Mode">
     <button class="mode is-active" data-mode="chat" role="tab" aria-selected="true">Chat</button>
     <button class="mode" data-mode="json" role="tab" aria-selected="false">JSON</button>
+    <button class="mode" data-mode="batch" role="tab" aria-selected="false">Batch</button>
     <button class="mode" data-mode="tools" role="tab" aria-selected="false">Tools</button>
   </nav>
 
   <div class="status">
+    <span class="tools-flag mono" id="tools-flag" hidden title="MCP tools active"></span>
     <span class="lamp" id="lamp" data-state="starting" title="apfel status"></span>
     <span class="status-text mono" id="status-text">starting…</span>
     <button class="ghost" id="btn-restart" title="Restart the apfel server">Restart</button>
@@ -76,6 +78,36 @@
         <pre class="result mono" id="json-result">Constrained decoding: the model cannot produce output that violates the schema.</pre>
       </div>
     </div>
+  </section>
+
+  <!-- BATCH -->
+  <section class="view" id="view-batch">
+    <div class="batch-head">
+      <div class="batch-controls">
+        <label class="eyebrow" for="batch-recipe">Recipe</label>
+        <select id="batch-recipe"></select>
+        <textarea id="batch-system" class="mono" rows="2" placeholder="System prompt applied to every row…" hidden></textarea>
+      </div>
+      <div class="batch-controls">
+        <label class="eyebrow" for="batch-input">Inputs — one per line, or attach files</label>
+        <textarea id="batch-input" spellcheck="false" placeholder="ls -la&#10;git rebase -i HEAD~3&#10;chmod 755 deploy.sh"></textarea>
+        <div class="row">
+          <input type="file" id="batch-files" hidden multiple>
+          <button class="ghost" id="batch-attach">Add files</button>
+          <span class="hint" id="batch-count">0 rows</span>
+        </div>
+      </div>
+      <div class="row space batch-run-row">
+        <span class="hint" id="batch-status"></span>
+        <span class="row">
+          <button class="ghost" id="batch-export" hidden>Copy CSV</button>
+          <button class="ghost" id="batch-stop" hidden>Stop</button>
+          <button class="primary" id="batch-run">Run batch</button>
+        </span>
+      </div>
+    </div>
+    <div class="batch-progress" id="batch-progress" hidden><div class="batch-bar" id="batch-bar"></div></div>
+    <div class="batch-results" id="batch-results"></div>
   </section>
 
   <!-- TOOLS -->
@@ -133,6 +165,37 @@
       <button class="ghost" id="btn-clear">Clear conversation</button>
     </div>
     <p class="hint">Settings save automatically and apply to the next message.</p>
+
+    <!-- MCP TOOLS -->
+    <div class="tuning-section">
+      <h2 class="eyebrow">MCP tools <em class="mono" id="mcp-state"></em></h2>
+      <p class="hint">Give the on-device model tools. apfel runs each MCP server and executes calls itself — the model just decides when. Restarts the endpoint on change.</p>
+      <div class="mcp-list" id="mcp-list"></div>
+      <div class="mcp-add">
+        <input type="text" id="mcp-path" class="mono" placeholder="/path/to/mcp-server (executable)">
+        <button class="ghost" id="mcp-add-btn">Add</button>
+      </div>
+      <div class="mcp-error" id="mcp-error" hidden></div>
+      <div class="mcp-activity" id="mcp-activity"></div>
+    </div>
+
+    <!-- ESCALATION -->
+    <div class="tuning-section">
+      <h2 class="eyebrow">Escalate <em class="mono" id="esc-state"></em></h2>
+      <p class="hint">Hand a conversation to a bigger OpenAI-compatible model when the on-device one is out of its depth. The key stays on this machine.</p>
+      <label class="field">
+        <span>Base URL</span>
+        <input type="text" id="cfg-esc-url" class="mono" placeholder="http://127.0.0.1:1234/v1">
+      </label>
+      <label class="field">
+        <span>Model</span>
+        <input type="text" id="cfg-esc-model" class="mono" placeholder="e.g. llama-3.3-70b or gpt-4o">
+      </label>
+      <label class="field">
+        <span>API key <em class="mono">optional for local</em></span>
+        <input type="password" id="cfg-esc-key" class="mono" placeholder="sk-… (blank for LM Studio / Ollama)">
+      </label>
+    </div>
   </aside>
 </main>
 
@@ -164,6 +227,7 @@
     <div class="composer-actions">
       <input type="file" id="file-input" hidden multiple>
       <button class="ghost" id="btn-attach" title="Attach a text file — its full content joins the prompt">Attach</button>
+      <button class="ghost" id="btn-escalate" hidden title="Resend this conversation to the bigger model configured in Tune → Escalate">Escalate ↑</button>
       <button class="ghost" id="btn-stop" hidden>Stop</button>
       <button class="primary" id="btn-send">Send</button>
     </div>

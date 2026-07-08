@@ -22,11 +22,25 @@ auto-restart with backoff, health-gated) and proxies it. No cloud, no keys.
   token readouts; drop any message to reclaim its tokens.
 - **JSON** — constrained decoding against a JSON Schema. Output is *guaranteed*
   to match the schema; the result pane validates and pretty-prints it.
+- **Batch** — run many inputs (pasted lines or attached files) through one recipe
+  and get a results table, with concurrency, a progress bar, and CSV export.
+  Because it's local and free, volume costs nothing.
 - **Tools** — one-shot utilities from apfel's bundled demos (explain a command,
   shell one-liner, naming, summarize, tighten prose), each stateless.
 - **Tune** — system prompt, temperature, top-p, seed, max response tokens, and
   the context-overflow strategy (`newest-first`, `sliding-window`, `summarize`,
-  `strict`, …). Saved to `config.json`, applied to the next message.
+  `strict`, …). Also two capability multipliers:
+  - **MCP tools** — give the on-device model real abilities. Point at an
+    executable MCP server and apfel runs it and executes tool calls itself; the
+    model just decides when. The header shows a 🔧 count, chat messages note
+    which tools fired, and a bad path falls back to running without tools rather
+    than bricking the endpoint.
+  - **Escalate** — hand the current conversation to a bigger OpenAI-compatible
+    model (LM Studio, Ollama, vLLM, or a cloud endpoint) when the on-device one
+    is out of its depth. The key stays server-side; reasoning models show a live
+    "thinking…" state so they never look frozen.
+
+  Settings save to `config.json` and apply to the next message.
 
 ## Layout
 
@@ -35,12 +49,18 @@ auto-restart with backoff, health-gated) and proxies it. No cloud, no keys.
 | `server.js` | Node server: static UI, `apfel --serve` supervisor, `/api/*` proxy |
 | `public/` | UI (vanilla — `index.html`, `styles.css`, `app.js`) |
 | `perci/` | Drop-in `ApfelMode.jsx` + `INTEGRATION.md` for embedding in Perci |
+| `examples/` | `mcp-clock.js` — a runnable example MCP server (time + calculator) |
 | `config.json` | Persisted tuning (created on first save) |
+
+**Try MCP in 30 seconds:** Tune → MCP tools → Add
+`…/apfel-harness/examples/mcp-clock.js`, then ask the model "what is 19 × 23?"
 
 ## API
 
-`/api/health` · `/api/model` · `/api/chat` (SSE proxy) · `/api/count` (exact
-tokens) · `/api/config` (GET/POST) · `/api/restart` · `/api/logs`.
+`/api/health` · `/api/model` · `/api/chat` (SSE proxy) · `/api/escalate` (SSE
+proxy to the bigger model) · `/api/count` (exact tokens) · `/api/config`
+(GET/POST; MCP changes restart the child) · `/api/tools` (discovered MCP tools +
+recent calls) · `/api/restart` · `/api/logs`.
 
 ## Ports
 

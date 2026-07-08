@@ -8,6 +8,7 @@
 //   6272  apfel --serve child (apfel's default 11434 belongs to Ollama)
 
 const http = require('http');
+const https = require('https');
 const fs = require('fs');
 const path = require('path');
 const { spawn, execFile } = require('child_process');
@@ -29,6 +30,9 @@ const DEFAULT_CONFIG = {
   contextStrategy: 'newest-first', // newest-first | oldest-first | sliding-window | summarize | strict
   contextMaxTurns: 8, // sliding-window only
   themeMode: 'system', // system | dark | light
+  mcpServers: [], // [{ path, enabled }] — apfel executes these tools server-side
+  mcpTimeout: 5, // seconds
+  escalation: { baseUrl: '', apiKey: '', model: '' }, // OpenAI-compatible upstream for the "escalate" hook
 };
 
 function loadConfig() {
@@ -47,6 +51,11 @@ let child = null;
 let childState = 'starting'; // starting | online | offline
 let restartDelay = 500;
 let shuttingDown = false;
+let lastStart = 0;
+let mcpFallback = false; // true once a bad MCP config forced a no-tools restart
+let mcpError = null;
+let discoveredTools = []; // [{ server, name }] parsed from apfel's startup log
+const recentToolCalls = []; // [{ name, args, result, at }] parsed live from apfel's log
 const logRing = [];
 function log(line) {
   const entry = `${new Date().toISOString()} ${line}`;
@@ -55,17 +64,50 @@ function log(line) {
   process.stderr.write(entry + '\n');
 }
 
+// Build the --mcp flags for the enabled, existing server paths. A missing path
+// is skipped (not fatal); a present-but-broken one is caught by fast-crash below.
+function mcpArgs() {
+  if (mcpFallback) return [];
+  const cfg = loadConfig();
+  const args = [];
+  for (const s of cfg.mcpServers || []) {
+    if (!s || !s.enabled || !s.path) continue;
+    if (!fs.existsSync(s.path)) { log(`[harness] MCP path not found, skipping: ${s.path}`); continue; }
+    args.push('--mcp', s.path);
+  }
+  if (args.length) args.push('--mcp-timeout', String(cfg.mcpTimeout || 5));
+  return args;
+}
+
+// apfel prints one "mcp: <path> - <tool>" per tool at startup, and
+// "mcp tool: <name>(<args>) = <result>" when the model invokes one. Parse both.
+function parseApfelLine(l) {
+  const disc = l.match(/^mcp: (.+?) - (\S+)$/);
+  if (disc) {
+    if (!discoveredTools.find((t) => t.name === disc[2])) discoveredTools.push({ server: disc[1], name: disc[2] });
+    return;
+  }
+  const call = l.match(/mcp tool: (\S+?)\((.*)\) = (.*)$/);
+  if (call) {
+    recentToolCalls.push({ name: call[1], args: call[2], result: call[3], at: Date.now() });
+    if (recentToolCalls.length > 30) recentToolCalls.shift();
+  }
+}
+
 function startUpstream() {
   if (shuttingDown) return;
   childState = 'starting';
-  child = spawn('apfel', ['--serve', '--port', String(UPSTREAM_PORT), '--host', UPSTREAM_HOST], {
+  discoveredTools = []; // re-announced on every start
+  lastStart = Date.now();
+  const extra = mcpArgs();
+  child = spawn('apfel', ['--serve', '--port', String(UPSTREAM_PORT), '--host', UPSTREAM_HOST, ...extra], {
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   const onData = (buf) =>
     String(buf)
       .split('\n')
       .filter(Boolean)
-      .forEach((l) => log(`[apfel] ${l}`));
+      .forEach((l) => { log(`[apfel] ${l}`); parseApfelLine(l); });
   child.stdout.on('data', onData);
   child.stderr.on('data', onData);
   child.on('error', (err) => {
@@ -76,6 +118,14 @@ function startUpstream() {
     child = null;
     if (shuttingDown) return;
     childState = 'offline';
+    // A near-instant exit while MCP flags were set means a bad server path —
+    // fall back to running WITHOUT tools so the harness stays usable.
+    if (Date.now() - lastStart < 2500 && extra.length && !mcpFallback) {
+      mcpFallback = true;
+      mcpError = 'apfel could not start with the configured MCP server(s); running without tools. Check each path exists and is executable.';
+      log('[harness] ' + mcpError);
+      return setTimeout(startUpstream, 300);
+    }
     log(`[harness] apfel exited (code ${code}); restarting in ${restartDelay}ms`);
     setTimeout(startUpstream, restartDelay);
     restartDelay = Math.min(restartDelay * 2, 15000);
@@ -87,11 +137,18 @@ function startUpstream() {
         childState = 'online';
         restartDelay = 500;
         clearInterval(poll);
-        log('[harness] apfel is online');
+        log(`[harness] apfel is online${extra.length ? ` with ${discoveredTools.length} tool(s)` : ''}`);
       })
       .catch(() => {});
   }, 400);
   setTimeout(() => clearInterval(poll), 20000);
+}
+
+// Restart the child cleanly (used when MCP config changes — --mcp is a startup flag).
+function restartUpstream() {
+  restartDelay = 500;
+  if (child) child.kill('SIGTERM'); // exit handler relaunches
+  else startUpstream();
 }
 
 function upstreamGet(pathname) {
@@ -169,6 +226,8 @@ async function handleHealth(res) {
     version: VERSION,
     url: `http://${HOST}:${PORT}`,
     apfel: { state: childState, port: UPSTREAM_PORT, health: upstream },
+    mcp: { tools: discoveredTools.length, fallback: mcpFallback, error: mcpError },
+    escalation: !!(loadConfig().escalation || {}).model,
   });
 }
 
@@ -241,20 +300,96 @@ async function handleCount(req, res) {
 async function handleConfig(req, res) {
   if (req.method === 'GET') return sendJSON(res, 200, loadConfig());
   try {
-    const patch = JSON.parse(await readBody(req));
-    const cfg = { ...loadConfig(), ...patch };
+    const before = loadConfig();
+    const cfg = { ...before, ...JSON.parse(await readBody(req)) };
     saveConfig(cfg);
-    sendJSON(res, 200, cfg);
+    // --mcp is a startup flag, so any change to the MCP set needs a child restart.
+    const mcpChanged =
+      JSON.stringify(before.mcpServers) !== JSON.stringify(cfg.mcpServers) ||
+      before.mcpTimeout !== cfg.mcpTimeout;
+    if (mcpChanged) {
+      mcpFallback = false;
+      mcpError = null;
+      restartUpstream();
+    }
+    sendJSON(res, 200, { ...cfg, restarting: mcpChanged });
   } catch (err) {
     sendJSON(res, 400, { error: `bad config: ${err.message}` });
   }
 }
 
+function handleTools(res) {
+  const cfg = loadConfig();
+  sendJSON(res, 200, {
+    servers: cfg.mcpServers || [],
+    discovered: discoveredTools,
+    recentCalls: recentToolCalls.slice(-15).reverse(),
+    fallback: mcpFallback,
+    error: mcpError,
+    state: childState,
+  });
+}
+
+// Forward the current conversation to a bigger OpenAI-compatible model. The
+// upstream base URL + key stay server-side; the SSE stream is piped straight back.
+async function handleEscalate(req, res) {
+  let payload;
+  try {
+    payload = JSON.parse(await readBody(req));
+  } catch (err) {
+    return sendJSON(res, 400, { error: `bad request body: ${err.message}` });
+  }
+  const esc = loadConfig().escalation || {};
+  if (!esc.baseUrl || !esc.model) {
+    return sendJSON(res, 400, { error: 'Escalation is not configured — set a base URL and model in Tune → Escalate.' });
+  }
+  let url;
+  try {
+    url = new URL(esc.baseUrl.replace(/\/+$/, '') + '/chat/completions');
+  } catch {
+    return sendJSON(res, 400, { error: `Escalation base URL is not valid: ${esc.baseUrl}` });
+  }
+  const body = JSON.stringify({
+    model: esc.model,
+    stream: true,
+    messages: payload.messages,
+    temperature: payload.temperature ?? 0.7,
+    max_tokens: payload.max_tokens ?? 1024,
+  });
+  const mod = url.protocol === 'https:' ? https : http;
+  const upstreamReq = mod.request(
+    {
+      hostname: url.hostname,
+      port: url.port || (url.protocol === 'https:' ? 443 : 80),
+      path: url.pathname + url.search,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(body),
+        ...(esc.apiKey ? { Authorization: `Bearer ${esc.apiKey}` } : {}),
+      },
+    },
+    (up) => {
+      res.writeHead(up.statusCode, {
+        'Content-Type': up.headers['content-type'] || 'text/event-stream',
+        'Cache-Control': 'no-store',
+      });
+      up.pipe(res);
+    }
+  );
+  upstreamReq.on('error', (err) => {
+    if (!res.headersSent) sendJSON(res, 502, { error: `Escalation upstream error: ${err.message}` });
+    else res.end();
+  });
+  req.on('close', () => upstreamReq.destroy());
+  upstreamReq.end(body);
+}
+
 function handleRestart(res) {
   log('[harness] restart requested from UI');
-  restartDelay = 500;
-  if (child) child.kill('SIGTERM');
-  else startUpstream();
+  mcpFallback = false;
+  mcpError = null;
+  restartUpstream();
   sendJSON(res, 200, { ok: true, state: 'starting' });
 }
 
@@ -265,8 +400,10 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/health') return await handleHealth(res);
     if (pathname === '/api/model') return await handleModel(res);
     if (pathname === '/api/chat' && req.method === 'POST') return await handleChat(req, res);
+    if (pathname === '/api/escalate' && req.method === 'POST') return await handleEscalate(req, res);
     if (pathname === '/api/count' && req.method === 'POST') return await handleCount(req, res);
     if (pathname === '/api/config') return await handleConfig(req, res);
+    if (pathname === '/api/tools') return handleTools(res);
     if (pathname === '/api/restart' && req.method === 'POST') return handleRestart(res);
     if (pathname === '/api/logs') return sendJSON(res, 200, { lines: logRing.slice(-100) });
     if (pathname.startsWith('/api/')) return sendJSON(res, 404, { error: 'unknown endpoint' });
