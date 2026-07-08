@@ -1,0 +1,29 @@
+# SearXNG config for the Apfel Harness web-search MCP.
+# Copy to ~/searxng/settings.yml, then replace secret_key with your own:
+#   openssl rand -hex 32
+#
+# Inherits all upstream defaults; overrides only what the harness needs.
+# Single-user, localhost-only: limiter/bot-detection OFF so the MCP server's
+# non-browser JSON requests aren't 403'd (this is also why no Redis is needed).
+use_default_settings: true
+
+general:
+  instance_name: "apfel-search"
+  donation_url: false
+  contact_url: false
+
+server:
+  secret_key: "CHANGE_ME_run_openssl_rand_hex_32"
+  limiter: false            # no rate-limiter → no Valkey/Redis container required
+  image_proxy: false
+  method: "GET"
+
+search:
+  safe_search: 0
+  autocomplete: ""
+  formats:
+    - html
+    - json                 # off by default; the MCP server needs this
+
+ui:
+  static_use_hash: true

@@ -34,7 +34,12 @@ auto-restart with backoff, health-gated) and proxies it. No cloud, no keys.
     executable MCP server and apfel runs it and executes tool calls itself; the
     model just decides when. The header shows a 🔧 count, chat messages note
     which tools fired, and a bad path falls back to running without tools rather
-    than bricking the endpoint.
+    than bricking the endpoint. Ships with two examples: a time/calculator server
+    and **`web_search`** (see below).
+  - **Private web search** — the on-device model can search the live web without
+    breaking its offline identity: queries go to a local **SearXNG** container,
+    not a third-party API. See [`examples/searxng/`](examples/searxng/) — one
+    ~370 MB container, ~180 MB RAM, and every query stays on the Mac.
   - **Escalate** — hand the current conversation to a bigger OpenAI-compatible
     model (LM Studio, Ollama, vLLM, or a cloud endpoint) when the on-device one
     is out of its depth. The key stays server-side; reasoning models show a live
@@ -49,11 +54,12 @@ auto-restart with backoff, health-gated) and proxies it. No cloud, no keys.
 | `server.js` | Node server: static UI, `apfel --serve` supervisor, `/api/*` proxy |
 | `public/` | UI (vanilla — `index.html`, `styles.css`, `app.js`) |
 | `perci/` | Drop-in `ApfelMode.jsx` + `INTEGRATION.md` for embedding in Perci |
-| `examples/` | `mcp-clock.js` — a runnable example MCP server (time + calculator) |
+| `examples/` | Runnable MCP servers: `mcp-clock.js` (time + calculator), `mcp-websearch.js` (SearXNG-backed), and `searxng/` (container setup) |
 | `config.json` | Persisted tuning (created on first save) |
 
 **Try MCP in 30 seconds:** Tune → MCP tools → Add
 `…/apfel-harness/examples/mcp-clock.js`, then ask the model "what is 19 × 23?"
+For live web search, follow [`examples/searxng/README.md`](examples/searxng/README.md).
 
 ## API
 
