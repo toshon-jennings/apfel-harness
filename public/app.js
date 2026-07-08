@@ -519,7 +519,9 @@ document.querySelectorAll('.mode').forEach((btn) => {
     });
     document.querySelectorAll('.view').forEach((v) => v.classList.remove('is-active'));
     $(`view-${btn.dataset.mode}`).classList.add('is-active');
-    $('deck').style.display = btn.dataset.mode === 'chat' ? '' : 'none';
+    const isChat = btn.dataset.mode === 'chat';
+    $('deck').style.display = isChat ? '' : 'none';
+    $('btn-new').hidden = !isChat; // "New chat" only makes sense in Chat mode
   };
 });
 
@@ -535,13 +537,21 @@ $('btn-restart').onclick = async () => {
   await fetch('/api/restart', { method: 'POST' }).catch(() => {});
 };
 
-$('btn-clear').onclick = () => {
+function newChat() {
+  if (controller) controller.abort();
   messages = [];
+  attachments = [];
+  renderAttachments();
+  input.value = '';
+  autosize();
   persist();
   renderTranscript();
   updateGauge();
   scheduleExactCount();
-};
+  document.querySelector('.mode[data-mode="chat"]')?.click();
+  input.focus();
+}
+$('btn-new').onclick = newChat;
 
 $('btn-send').onclick = send;
 $('btn-stop').onclick = () => controller?.abort();
@@ -557,6 +567,7 @@ input.addEventListener('keydown', (e) => {
 });
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && controller) controller.abort();
+  if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'O' || e.key === 'o')) { e.preventDefault(); newChat(); }
 });
 
 document.querySelectorAll('.starter').forEach((b) => {

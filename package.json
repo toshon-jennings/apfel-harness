@@ -1,6 +1,6 @@
 {
   "name": "apfel-harness",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "GUI harness for Apple Intelligence via the apfel CLI (on-device FoundationModels)",
   "main": "server.js",
   "scripts": {

@@ -29,6 +29,7 @@
     <span class="tools-flag mono" id="tools-flag" hidden title="MCP tools active"></span>
     <span class="lamp" id="lamp" data-state="starting" title="apfel status"></span>
     <span class="status-text mono" id="status-text">starting…</span>
+    <button class="ghost" id="btn-new" title="Start a new conversation (⌘/Ctrl+Shift+O)">New chat</button>
     <button class="ghost" id="btn-restart" title="Restart the apfel server">Restart</button>
     <button class="ghost" id="btn-tune" aria-expanded="false" title="Tuning panel">Tune</button>
   </div>
@@ -161,9 +162,6 @@
       <input type="range" id="cfg-maxturns" min="2" max="32" step="1" value="8">
     </label>
 
-    <div class="tuning-actions">
-      <button class="ghost" id="btn-clear">Clear conversation</button>
-    </div>
     <p class="hint">Settings save automatically and apply to the next message.</p>
 
     <!-- MCP TOOLS -->
