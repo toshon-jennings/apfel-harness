@@ -1,5 +1,5 @@
 /* Apfel Harness — warm instrument-panel around a 4k-token lamp.
-   Palette: enamel darks + amber indicator lamp. Type: Apple system faces
+   Palette: enamel darks + Apple rainbow accents. Type: Apple system faces
    (the model is on-device; the fonts are too — fully offline). */
 
 :root {
@@ -11,9 +11,9 @@
   --text: #efe9df;
   --text-2: #a89f92;
   --text-3: #71685a;
-  --lamp: #ffb454;        /* amber indicator lamp — the one accent */
-  --lamp-deep: #c98f3f;   /* history segment */
-  --lamp-dim: #7d6134;    /* system segment */
+  --lamp: #4DA64D;        /* Apple green — primary accent */
+  --lamp-deep: #C49520;   /* gold — history segment */
+  --lamp-dim: #1E6E99;    /* blue — system segment */
   --hot: #ff6b57;         /* near the ceiling */
   --ok: #9bc46b;          /* online lamp */
   --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
@@ -30,9 +30,9 @@
   --text: #2b241b;
   --text-2: #6b6152;
   --text-3: #988d7b;
-  --lamp: #b06e12;
-  --lamp-deep: #c98f3f;
-  --lamp-dim: #d8b98a;
+  --lamp: #3D8E3D;
+  --lamp-deep: #A67D18;
+  --lamp-dim: #5BA3C4;
   --hot: #cf3f2e;
   --ok: #5a8f2e;
 }
@@ -73,8 +73,14 @@ body {
 }
 .brand { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .brand-mark { width: 18px; height: 18px; }
-.brand-name { font-weight: 650; letter-spacing: -0.01em; white-space: nowrap; }
-.brand-name em { font-style: normal; color: var(--text-3); font-weight: 450; }
+.brand-name {
+  font-weight: 650; letter-spacing: -0.01em; white-space: nowrap;
+  background: linear-gradient(90deg, #4DA64D, #E8B32A, #E07A2E, #D04545, #8E4E9A, #2E94C9);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.brand-name em { font-style: normal; font-weight: 450; -webkit-text-fill-color: var(--text-3); }
 body.embedded .brand { display: none; } /* Perci provides its own window chrome */
 
 .modes {
@@ -96,6 +102,26 @@ body.embedded .brand { display: none; } /* Perci provides its own window chrome 
 }
 .mode:hover { color: var(--text); }
 .mode.is-active { background: var(--panel-2); color: var(--text); }
+
+.theme-toggle {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--ink);
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+}
+.theme-btn {
+  border: 0;
+  background: transparent;
+  color: var(--text-3);
+  font: 500 11px var(--sans);
+  padding: 3px 8px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+.theme-btn:hover { color: var(--text-2); }
+.theme-btn.is-active { background: var(--panel-2); color: var(--text); }
 
 .status { margin-left: auto; display: flex; align-items: center; gap: 10px; }
 .status-text { font-size: 11px; color: var(--text-3); }

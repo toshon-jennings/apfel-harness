@@ -13,6 +13,9 @@ function applyTheme(mode) {
   const system = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
   const resolved = mode === 'system' || !mode ? system : mode;
   document.documentElement.setAttribute('data-theme', resolved);
+  document.querySelectorAll('.theme-btn').forEach((b) => {
+    b.classList.toggle('is-active', b.dataset.theme === mode);
+  });
 }
 
 // ---------- state ----------
@@ -845,6 +848,18 @@ $('batch-files').onchange = async (e) => {
 
 // refresh tool state whenever the drawer opens
 $('btn-tune').addEventListener('click', () => { if (!$('tuning').hidden) pollTools(); });
+
+// ---------- theme toggle ----------
+document.querySelectorAll('.theme-btn').forEach((btn) => {
+  btn.onclick = () => {
+    config.themeMode = btn.dataset.theme;
+    applyTheme(config.themeMode);
+    saveConfig();
+  };
+});
+matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => {
+  if (config.themeMode === 'system') applyTheme('system');
+});
 
 // ---------- go ----------
 (async function boot() {

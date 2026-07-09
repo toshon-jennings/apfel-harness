@@ -5,15 +5,25 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Apfel Harness</title>
 <link rel="stylesheet" href="styles.css">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='12' cy='14' r='8' fill='%23ffb454'/><path d='M12 6c0-3 2-4 3-4' stroke='%239bc46b' stroke-width='2' fill='none'/></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><defs><linearGradient id='r' x1='0' y1='0' x2='0' y2='1'><stop offset='0%25' stop-color='%234DA64D'/><stop offset='20%25' stop-color='%23E8B32A'/><stop offset='40%25' stop-color='%23E07A2E'/><stop offset='60%25' stop-color='%23D04545'/><stop offset='80%25' stop-color='%238E4E9A'/><stop offset='100%25' stop-color='%232E94C9'/></linearGradient></defs><circle cx='12' cy='14' r='8' fill='url(%23r)'/><path d='M12 6c0-3 2-4 3-4' stroke='%234DA64D' stroke-width='2' fill='none'/></svg>">
 </head>
 <body>
 
 <header class="bar">
   <div class="brand">
     <svg class="brand-mark" viewBox="0 0 24 24" aria-hidden="true">
-      <circle cx="12" cy="14" r="8" fill="var(--lamp)"/>
-      <path d="M12 6.5c0-2.8 1.8-4 3.2-4.2" stroke="var(--ok)" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+      <defs>
+        <linearGradient id="apple-rainbow" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#4DA64D"/>
+          <stop offset="20%" stop-color="#E8B32A"/>
+          <stop offset="40%" stop-color="#E07A2E"/>
+          <stop offset="60%" stop-color="#D04545"/>
+          <stop offset="80%" stop-color="#8E4E9A"/>
+          <stop offset="100%" stop-color="#2E94C9"/>
+        </linearGradient>
+      </defs>
+      <circle cx="12" cy="14" r="8" fill="url(#apple-rainbow)"/>
+      <path d="M12 6.5c0-2.8 1.8-4 3.2-4.2" stroke="#4DA64D" stroke-width="1.8" fill="none" stroke-linecap="round"/>
     </svg>
     <span class="brand-name">apfel<em>harness</em></span>
   </div>
@@ -24,6 +34,12 @@
     <button class="mode" data-mode="batch" role="tab" aria-selected="false">Batch</button>
     <button class="mode" data-mode="tools" role="tab" aria-selected="false">Tools</button>
   </nav>
+
+  <div class="theme-toggle" role="radiogroup" aria-label="Theme">
+    <button class="theme-btn is-active" data-theme="system" title="Follow system preference">Auto</button>
+    <button class="theme-btn" data-theme="light" title="Light mode">Light</button>
+    <button class="theme-btn" data-theme="dark" title="Dark mode">Dark</button>
+  </div>
 
   <div class="status">
     <span class="tools-flag mono" id="tools-flag" hidden title="MCP tools active"></span>
