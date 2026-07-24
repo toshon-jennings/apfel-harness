@@ -172,12 +172,30 @@ button { font-family: var(--sans); }
   padding: 24px 20px 12px;
   scroll-behavior: smooth;
 }
+.transcript:has(.empty) {
+  background-image: radial-gradient(circle, rgba(22, 19, 16, 0.3) 0%, var(--ink) 85%), url('apfel-vibrant.jpg');
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+}
 .empty {
   max-width: 480px;
-  margin: 9vh auto 0;
+  margin: 12vh auto 0;
   text-align: center;
+  padding: 36px 32px;
+  background: rgba(30, 26, 21, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-radius: 16px;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
 }
-.empty-mark { width: 44px; height: 44px; margin-bottom: 14px; }
+[data-theme="light"] .empty {
+  background: rgba(241, 236, 227, 0.45);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.1);
+}
+.empty-mark { display: none; }
 .empty h1 { font-size: 19px; font-weight: 650; letter-spacing: -0.015em; margin: 0 0 8px; }
 .empty p { color: var(--text-2); margin: 0 0 20px; }
 .starters { display: flex; flex-direction: column; gap: 8px; }

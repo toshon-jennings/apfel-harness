@@ -7,7 +7,7 @@
 //   chmod +x examples/mcp-websearch.js
 //
 // Requires SearXNG running with JSON output enabled (see examples/searxng/).
-//   SEARXNG_URL   base URL of the instance   [default http://127.0.0.1:8888]
+//   SEARXNG_URL   base URL of the instance   [default http://127.0.0.1:8999]
 //   SEARX_RESULTS max results to return       [default 4]
 //
 // The 4k context is tiny, so results are deliberately terse: N hits, each a
@@ -17,7 +17,7 @@
 const http = require('http');
 const https = require('https');
 
-const BASE = (process.env.SEARXNG_URL || 'http://127.0.0.1:8888').replace(/\/+$/, '');
+const BASE = (process.env.SEARXNG_URL || 'http://127.0.0.1:8999').replace(/\/+$/, '');
 const MAX = Math.max(1, Math.min(8, parseInt(process.env.SEARX_RESULTS || '4', 10)));
 
 const send = (m) => process.stdout.write(JSON.stringify(m) + '\n');

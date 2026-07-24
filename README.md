@@ -1,5 +1,8 @@
 # Apfel Harness
 
+> [!IMPORTANT]
+> Apfel Harness is embedded as a first-class window in Perci (`APFEL_WINDOW_ID`). Updates should be made to both this standalone repository (`~/apfel-harness`) and the Perci codebase (`~/opal`).
+
 A local web GUI that wraps the [`apfel`](https://github.com/Arthur-Ficial/apfel)
 CLI — Apple Intelligence (on-device FoundationModels) from a browser. Built to
 squeeze every ounce out of a tiny 4,096-token, fully-offline model, and to drop

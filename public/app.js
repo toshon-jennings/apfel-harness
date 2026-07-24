@@ -865,6 +865,7 @@ matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => {
 (async function boot() {
   applyTheme(params.get('theme') || 'system');
   await loadConfig();
+  if (!params.get('theme')) applyTheme(config.themeMode || 'dark');
   buildRuler();
   buildTools();
   buildBatchRecipes();

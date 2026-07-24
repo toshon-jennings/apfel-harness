@@ -29,7 +29,7 @@ const DEFAULT_CONFIG = {
   maxTokens: 512,
   contextStrategy: 'newest-first', // newest-first | oldest-first | sliding-window | summarize | strict
   contextMaxTurns: 8, // sliding-window only
-  themeMode: 'system', // system | dark | light
+  themeMode: 'dark', // system | dark | light
   mcpServers: [], // [{ path, enabled }] — apfel executes these tools server-side
   mcpTimeout: 5, // seconds
   escalation: { baseUrl: '', apiKey: '', model: '' }, // OpenAI-compatible upstream for the "escalate" hook
@@ -395,6 +395,14 @@ function handleRestart(res) {
 
 // ---------- server ----------
 const server = http.createServer(async (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, PATCH, DELETE');
+  res.setHeader('Access-Control-Allow-Headers', 'X-Requested-With,Content-Type,Authorization');
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204);
+    res.end();
+    return;
+  }
   const { pathname } = new URL(req.url, `http://${HOST}:${PORT}`);
   try {
     if (pathname === '/api/health') return await handleHealth(res);
