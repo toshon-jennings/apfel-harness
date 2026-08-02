@@ -8,3 +8,8 @@ config.json
 HANDOFF.md
 SUMMARY.md
 HITL.md
+
+# Personal agent working docs — local to the maintainer, not part of the package
+AGENTS.md
+CLAUDE.md
+DECISIONS.md
