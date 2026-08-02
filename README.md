@@ -73,6 +73,4 @@ recent calls) · `/api/restart` · `/api/logs`.
 
 ## Ports
 
-6271 (UI) and 6272 (`apfel --serve` child) — registered in
-`~/.config/agent-rules/PORTMASTER.md`. Independent of the LFM Harness's apfel on
-11435.
+6271 (UI) and 6272 (`apfel --serve` child).
