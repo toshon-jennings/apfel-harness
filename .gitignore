@@ -2,3 +2,9 @@ node_modules/
 config.json
 .DS_Store
 *.log
+
+
+# Personal agent working docs — local to the maintainer, not part of the package
+HANDOFF.md
+SUMMARY.md
+HITL.md
