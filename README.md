@@ -5,8 +5,7 @@
 
 A local web GUI that wraps the [`apfel`](https://github.com/Arthur-Ficial/apfel)
 CLI — Apple Intelligence (on-device FoundationModels) from a browser. Built to
-squeeze every ounce out of a tiny 4,096-token, fully-offline model, and to drop
-into [Perci](../opal) as a first-class window.
+squeeze every ounce out of a tiny 4,096-token fully-offline model. Use standalone or in [Perci](../opal) as a first-class window.
 
 ```
 node server.js      # or: npm start
