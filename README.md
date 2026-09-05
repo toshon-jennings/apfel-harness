@@ -15,6 +15,15 @@ open http://127.0.0.1:6271
 `server.js` spawns and supervises its own `apfel --serve` child (port 6272,
 auto-restart with backoff, health-gated) and proxies it. No cloud, no keys.
 
+## Menu bar
+
+`menubar/` holds a zero-dependency Swift menu-bar app (**● Apfel** in the
+top-right, green = online). Click it for **Open Apfel Harness** (starts the
+server via the `local.perci.apfel-harness` LaunchAgent first if it's down),
+**Restart Backend**, and **Copy URL**. Rebuild with `menubar/build.sh`; the
+installed copy lives in `~/Applications/ApfelHarnessMenu.app` and auto-starts
+at login via `com.toshon.apfel-harness-menu`.
+
 ## What's in it
 
 - **Chat** — streaming conversation with a live **context gauge**: a tape that
@@ -54,6 +63,7 @@ auto-restart with backoff, health-gated) and proxies it. No cloud, no keys.
 | Path | Purpose |
 |------|---------|
 | `server.js` | Node server: static UI, `apfel --serve` supervisor, `/api/*` proxy |
+| `menubar/` | Swift menu-bar app source (`build.sh` rebuilds the `.app`) |
 | `public/` | UI (vanilla — `index.html`, `styles.css`, `app.js`) |
 | `perci/` | Drop-in `ApfelMode.jsx` + `INTEGRATION.md` for embedding in Perci |
 | `examples/` | Runnable MCP servers: `mcp-clock.js` (time + calculator), `mcp-websearch.js` (SearXNG-backed), and `searxng/` (container setup) |
