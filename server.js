@@ -13,6 +13,25 @@ const fs = require('fs');
 const path = require('path');
 const { spawn, execFile } = require('child_process');
 
+// Resolve apfel without trusting PATH. launchd (and other bare environments)
+// hand processes a minimal PATH, so the bare name only works if whoever
+// started us exported one — probe the usual install locations instead, and
+// fall back to the bare name for anything this list doesn't know about.
+const APFEL_CANDIDATES = [
+  '/opt/homebrew/bin/apfel',
+  '/usr/local/bin/apfel',
+  path.join(process.env.HOME || '', '.local/bin/apfel'),
+];
+const APFEL_BIN = APFEL_CANDIDATES.find((p) => {
+  try { return p && fs.accessSync(p, fs.constants.X_OK) === undefined; } catch { return false; }
+}) || 'apfel';
+
+// PATH to hand the apfel child: MCP servers are node scripts spawned via
+// `#!/usr/bin/env node`, so `node`'s directory must be on their PATH even if
+// ours was minimal. The running node's own dir leads; system dirs trail.
+const CHILD_PATH = [path.dirname(process.execPath), '/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/bin'].join(':');
+const CHILD_ENV = { ...process.env, PATH: CHILD_PATH };
+
 const PORT = 6271;
 const HOST = '127.0.0.1';
 const UPSTREAM_PORT = 6272;
@@ -100,8 +119,9 @@ function startUpstream() {
   discoveredTools = []; // re-announced on every start
   lastStart = Date.now();
   const extra = mcpArgs();
-  child = spawn('apfel', ['--serve', '--port', String(UPSTREAM_PORT), '--host', UPSTREAM_HOST, ...extra], {
+  child = spawn(APFEL_BIN, ['--serve', '--port', String(UPSTREAM_PORT), '--host', UPSTREAM_HOST, ...extra], {
     stdio: ['ignore', 'pipe', 'pipe'],
+    env: CHILD_ENV,
   });
   const onData = (buf) =>
     String(buf)
@@ -284,7 +304,7 @@ async function handleCount(req, res) {
     return sendJSON(res, 400, { error: `bad request body: ${err.message}` });
   }
   if (!text.trim()) return sendJSON(res, 200, { tokens: 0, exact: true });
-  const cp = execFile('apfel', ['--count-tokens', '-o', 'json', '--', text], { timeout: 8000 }, (err, stdout) => {
+  const cp = execFile(APFEL_BIN, ['--count-tokens', '-o', 'json', '--', text], { timeout: 8000 }, (err, stdout) => {
     try {
       const j = JSON.parse(stdout);
       const tokens = typeof j.total === 'number' ? j.total : j.prompt_tokens;

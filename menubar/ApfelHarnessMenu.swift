@@ -141,9 +141,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if p.terminationStatus == 0 { return }
         }
         // Last resort: start node directly (LaunchAgent uses the same command).
+        // Resolve node by absolute path — Process() gets launchd's minimal PATH
+        // too, so bare "node" can fail even though a terminal finds it.
+        let candidates = [
+            NSHomeDirectory() + "/.hermes/node/bin/node",
+            "/opt/homebrew/bin/node",
+            "/usr/local/bin/node",
+        ]
+        let nodePath = candidates.first { FileManager.default.isExecutableFile(atPath: $0) }
+            ?? "/usr/bin/env"  // last-ditch: let env try whatever PATH we do have
         let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        p.arguments = ["node", NSHomeDirectory() + "/apfel-harness/server.js"]
+        p.executableURL = URL(fileURLWithPath: nodePath)
+        if nodePath == "/usr/bin/env" { p.arguments = ["node", NSHomeDirectory() + "/apfel-harness/server.js"] }
+        else { p.arguments = [NSHomeDirectory() + "/apfel-harness/server.js"] }
         p.currentDirectoryURL = URL(fileURLWithPath: NSHomeDirectory() + "/apfel-harness")
         try? p.run()
     }
