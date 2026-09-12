@@ -16,7 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var timer: Timer?
 
     func applicationDidFinishLaunching(_ note: Notification) {
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         statusItem.behavior = .removalAllowed
         if let button = statusItem.button {
             button.target = nil
@@ -56,6 +56,64 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - state
 
+    // Rainbow apple from the harness favicon (public/index.html), drawn in
+    // code so the menu app stays a single zero-dependency file. The badge
+    // keeps the green/yellow/red state signal without any menu-bar text.
+    static let appleStops: [(r: CGFloat, g: CGFloat, b: CGFloat)] = [
+        (0.302, 0.651, 0.302),
+        (0.910, 0.702, 0.165),
+        (0.878, 0.478, 0.180),
+        (0.816, 0.271, 0.271),
+        (0.557, 0.306, 0.604),
+        (0.180, 0.580, 0.788),
+    ]
+
+    func makeIcon(status: NSColor) -> NSImage {
+        let pt: CGFloat = 20
+        let img = NSImage(size: NSSize(width: pt, height: pt), flipped: false) { dst in
+            guard let ctx = NSGraphicsContext.current?.cgContext else { return false }
+        // Work in the favicon's 24x24 top-down units.
+        ctx.scaleBy(x: pt / 24, y: pt / 24)
+        ctx.translateBy(x: 0, y: 24)
+        ctx.scaleBy(x: 1, y: -1)
+        // Apple body: circle cx=12 cy=14 r=8, gradient green→blue top-down.
+        let cgStops = Self.appleStops.map {
+            NSColor(calibratedRed: $0.r, green: $0.g, blue: $0.b, alpha: 1).cgColor
+        } as CFArray
+        if let grad = CGGradient(
+            colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: cgStops,
+            locations: [0, 0.2, 0.4, 0.6, 0.8, 1.0]
+        ) {
+            ctx.saveGState()
+            ctx.addEllipse(in: CGRect(x: 4, y: 6, width: 16, height: 16))
+            ctx.clip()
+            ctx.drawLinearGradient(
+                grad, start: CGPoint(x: 12, y: 6), end: CGPoint(x: 12, y: 22),
+                options: [])
+            ctx.restoreGState()
+        }
+        // Stem: M12 6 c0-3 2-4 3-4, stroked green.
+        ctx.setStrokeColor(NSColor(calibratedRed: 0.302, green: 0.651, blue: 0.302, alpha: 1).cgColor)
+        ctx.setLineWidth(2)
+        ctx.setLineCap(.round)
+        ctx.move(to: CGPoint(x: 12, y: 6))
+        ctx.addCurve(to: CGPoint(x: 15, y: 2),
+                    control1: CGPoint(x: 12, y: 3), control2: CGPoint(x: 14, y: 2))
+        ctx.strokePath()
+        // Status badge, bottom-right on the apple's edge.
+        let badge = CGRect(x: 14.7, y: 15.5, width: 6.2, height: 6.2)
+        ctx.setFillColor(status.cgColor)
+        ctx.addEllipse(in: badge)
+        ctx.fillPath()
+        ctx.setStrokeColor(NSColor.white.cgColor)
+        ctx.setLineWidth(1.1)
+        ctx.addEllipse(in: badge)
+        ctx.strokePath()
+            return true
+        }
+        return img
+    }
+
     func setState(_ state: String, detail: String) {
         guard let button = statusItem.button else { return }
         let dot: NSColor = switch state {
@@ -64,16 +122,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case "offline": .systemRed
         default: .systemGray
         }
-        let attrs: [NSAttributedString.Key: Any] = [
-            .foregroundColor: dot,
-            .font: NSFont.systemFont(ofSize: 13, weight: .black),
-        ]
-        let label = NSMutableAttributedString(string: "● ", attributes: attrs)
-        label.append(NSAttributedString(
-            string: "Apfel",
-            attributes: [.font: NSFont.systemFont(ofSize: 13, weight: .medium)]
-        ))
-        button.attributedTitle = label
+        button.title = ""
+        button.image = makeIcon(status: dot)
         button.toolTip = "Apfel Harness — \(detail)"
         statusLine.title = "Status: \(detail)"
     }

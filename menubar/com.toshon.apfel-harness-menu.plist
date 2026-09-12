@@ -6,11 +6,11 @@
     <string>com.toshon.apfel-harness-menu</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/usr/bin/open</string>
-        <string>-a</string>
-        <string>/Users/toshonjennings/Applications/ApfelHarnessMenu.app</string>
+        <string>/Users/toshonjennings/Applications/ApfelHarnessMenu.app/Contents/MacOS/ApfelHarnessMenu</string>
     </array>
     <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
     <true/>
 </dict>
 </plist>
