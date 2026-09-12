@@ -1,6 +1,8 @@
 /* Apfel Harness — warm instrument-panel around a 4k-token lamp.
    Palette: enamel darks + Apple rainbow accents. Type: Apple system faces
-   (the model is on-device; the fonts are too — fully offline). */
+   (the model is on-device; the fonts are too — fully offline).
+   No photographic backdrop: the chrome stays quiet so the harness itself
+   is the show; a faint lamp-glow gradient does the atmosphere instead. */
 
 :root {
   --ink: #161310;
@@ -19,6 +21,7 @@
   --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
   --mono: ui-monospace, "SF Mono", Menlo, monospace;
   --radius: 10px;
+  --glow: rgba(77, 166, 77, 0.16);   /* lamp-glow accent, follows --lamp */
 }
 
 [data-theme="light"] {
@@ -35,6 +38,7 @@
   --lamp-dim: #5BA3C4;
   --hot: #cf3f2e;
   --ok: #5a8f2e;
+  --glow: rgba(61, 142, 61, 0.12);
 }
 
 * { box-sizing: border-box; }
@@ -85,23 +89,33 @@ body.embedded .brand { display: none; } /* Perci provides its own window chrome 
 
 .modes {
   display: flex;
-  gap: 2px;
-  padding: 3px;
-  background: var(--ink);
-  border: 1px solid var(--line-soft);
-  border-radius: 8px;
+  gap: 4px;
+  align-self: stretch;
+  align-items: flex-end;
 }
 .mode {
+  position: relative;
   border: 0;
   background: transparent;
-  color: var(--text-2);
+  color: var(--text-3);
   font: 500 12.5px var(--sans);
-  padding: 4px 12px;
-  border-radius: 6px;
+  padding: 6px 2px;
   cursor: pointer;
 }
-.mode:hover { color: var(--text); }
-.mode.is-active { background: var(--panel-2); color: var(--text); }
+.mode::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 1px;
+  background: transparent;
+  transition: background 0.15s ease;
+}
+.mode:hover { color: var(--text-2); }
+.mode.is-active { color: var(--text); }
+.mode.is-active::after { background: var(--lamp); box-shadow: 0 0 8px var(--lamp); }
 
 .theme-toggle {
   display: flex;
@@ -147,16 +161,20 @@ button { font-family: var(--sans); }
 }
 .ghost:hover { color: var(--text); border-color: var(--text-3); }
 .primary {
-  background: var(--lamp);
-  border: 1px solid var(--lamp);
-  color: #1c1508;
+  background: linear-gradient(180deg, #5cb75c, #4DA64D 55%, #3f8f3f);
+  border: 1px solid #3f8f3f;
+  color: #10240f;
   font-weight: 600;
   font-size: 13px;
   padding: 6px 16px;
   border-radius: 8px;
   cursor: pointer;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.25) inset, 0 0 14px var(--glow);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.2);
+  transition: box-shadow 0.15s ease, filter 0.15s ease;
 }
-.primary:hover { filter: brightness(1.08); }
+.primary:hover { filter: brightness(1.06); box-shadow: 0 1px 0 rgba(255, 255, 255, 0.25) inset, 0 0 22px var(--glow); }
+.primary:active { filter: brightness(0.97); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2) inset; }
 .primary:disabled, .ghost:disabled { opacity: 0.45; cursor: default; }
 :focus-visible { outline: 2px solid var(--lamp); outline-offset: 1px; }
 
@@ -173,32 +191,33 @@ button { font-family: var(--sans); }
   scroll-behavior: smooth;
 }
 .transcript:has(.empty) {
-  background-image: radial-gradient(circle, rgba(22, 19, 16, 0.3) 0%, var(--ink) 85%), url('apfel-vibrant.jpg');
-  background-position: center;
-  background-repeat: no-repeat;
-  background-size: cover;
+  background-image:
+    radial-gradient(ellipse 60% 50% at 50% 34%, var(--glow) 0%, transparent 70%),
+    radial-gradient(circle at 50% 120%, var(--glow) 0%, transparent 55%);
 }
 .empty {
   max-width: 480px;
-  margin: 12vh auto 0;
+  margin: 14vh auto 0;
   text-align: center;
-  padding: 36px 32px;
-  background: rgba(30, 26, 21, 0.45);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border-radius: 16px;
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  padding: 0 32px;
 }
-[data-theme="light"] .empty {
-  background: rgba(241, 236, 227, 0.45);
-  border: 1px solid rgba(0, 0, 0, 0.05);
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.1);
+.empty-mark-wrap {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 18px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid var(--line-soft);
+  background:
+    radial-gradient(circle at 50% 35%, var(--glow) 0%, transparent 72%),
+    var(--panel);
+  box-shadow: 0 0 24px var(--glow), inset 0 1px 2px rgba(0, 0, 0, 0.12);
 }
-.empty-mark { display: none; }
+.empty-mark { width: 30px; height: 30px; display: block; }
 .empty h1 { font-size: 19px; font-weight: 650; letter-spacing: -0.015em; margin: 0 0 8px; }
 .empty p { color: var(--text-2); margin: 0 0 20px; }
-.starters { display: flex; flex-direction: column; gap: 8px; }
+.starters { display: flex; flex-direction: column; gap: 8px; max-width: 380px; margin: 0 auto; }
 .starter {
   background: var(--panel);
   border: 1px solid var(--line-soft);
@@ -208,8 +227,22 @@ button { font-family: var(--sans); }
   border-radius: var(--radius);
   cursor: pointer;
   font-size: 13px;
+  transition: color 0.15s ease, border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
 }
-.starter:hover { border-color: var(--line); color: var(--text); }
+.starter:hover {
+  border-color: var(--lamp);
+  color: var(--text);
+  transform: translateY(-1px);
+  box-shadow: 0 0 16px var(--glow);
+}
+.starter::after {
+  content: "▍";
+  margin-left: 2px;
+  color: var(--lamp);
+  opacity: 0.4;
+  transition: opacity 0.15s ease;
+}
+.starter:hover::after { opacity: 0.9; }
 
 .msg { max-width: 720px; margin: 0 auto 18px; }
 .msg-head {
@@ -342,8 +375,12 @@ button { font-family: var(--sans); }
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 8px 8px 8px 12px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
-.composer:focus-within { border-color: var(--text-3); }
+.composer:focus-within {
+  border-color: var(--text-3);
+  box-shadow: 0 0 0 1px var(--text-3), 0 0 18px var(--glow);
+}
 .composer textarea {
   flex: 1;
   background: none;
