@@ -25,6 +25,17 @@ from the embedded harness page itself (same origin), or from a client that sends
 no `Origin` header (e.g. Electron's main process via Node `http`). A cross-origin
 renderer request to them gets `403`. See the Security section of the README.
 
+## Perci Notes (note text)
+
+Perci Notes sends note text only to `POST /api/notes/chat`, never to `/api/chat`.
+That route proxies to a tool-free `apfel --serve` worker on 6273 (no MCP flags, no
+`APFEL_*` environment, output never logged), and refuses any request carrying an
+`Origin` header, so call it from the Electron main process. Before each request,
+read `GET /api/health` and send only if `notesWorker.toolFree === true`; treat a
+missing `notesWorker` block (harness older than 0.5.0) as blocked. Do not use
+`/api/count` for note text: it passes the text on a child process's command line.
+Details: the README's "Tool-free Notes route".
+
 ## Steps
 
 1. **Copy the component:** `perci/ApfelMode.jsx` → `~/opal/src/components/ApfelMode.jsx`.
@@ -44,7 +55,8 @@ renderer request to them gets `403`. See the Security section of the README.
 | Port | What |
 |------|------|
 | 6271 | Harness UI + `/api/*` (this is what Perci embeds) |
-| 6272 | `apfel --serve` child, spawned and supervised by the harness |
+| 6272 | Shared `apfel --serve` child (runs MCP tools), spawned and supervised by the harness |
+| 6273 | Tool-free `apfel --serve` child behind `/api/notes/chat`, spawned and supervised by the harness |
 
-Both are registered in `~/.config/agent-rules/PORTMASTER.md`. 6272 is independent
-of the LFM Harness's apfel instance on 11435.
+All three are registered in `~/.config/agent-rules/PORTMASTER.md`. 6272 and 6273
+are independent of the LFM Harness's apfel instance on 11435.

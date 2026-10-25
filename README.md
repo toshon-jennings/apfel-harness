@@ -12,8 +12,10 @@ node server.js      # or: npm start
 open http://127.0.0.1:6271
 ```
 
-`server.js` spawns and supervises its own `apfel --serve` child (port 6272,
-auto-restart with backoff, health-gated) and proxies it. No cloud, no keys.
+`server.js` spawns and supervises its own `apfel --serve` children (auto-restart
+with backoff, health-gated) and proxies them: the shared worker on 6272, which
+runs your MCP tools, and a tool-free Notes worker on 6273 for Perci Notes. No
+cloud, no keys.
 
 ## Menu bar
 
@@ -75,10 +77,32 @@ For live web search, follow [`examples/searxng/README.md`](examples/searxng/READ
 
 ## API
 
-`/api/health` · `/api/model` · `/api/chat` (SSE proxy) · `/api/escalate` (SSE
+`/api/health` · `/api/model` · `/api/chat` (SSE proxy) · `/api/notes/chat` (SSE
+proxy to the tool-free Notes worker; see below) · `/api/escalate` (SSE
 proxy to the bigger model) · `/api/count` (exact tokens) · `/api/config`
-(GET/POST; MCP changes restart the child; the API key is never returned) · `/api/tools` (discovered MCP tools +
-recent calls) · `/api/restart` · `/api/logs`.
+(GET/POST; MCP changes restart the shared worker only; the API key is never returned) · `/api/tools` (discovered MCP tools +
+recent calls) · `/api/restart` (shared worker) · `/api/logs`.
+
+### Tool-free Notes route
+
+apfel runs MCP tools itself, and the harness logs their activity, so the shared
+worker is not safe for private text such as notes. `POST /api/notes/chat` (same
+body as `/api/chat`) goes only to a second worker on 6273, which:
+
+- is always started with **no** `--mcp` / `--mcp-timeout` flags and **no**
+  `APFEL_*` environment (apfel also loads tools from `APFEL_MCP`), whatever
+  `config.json` says;
+- has its output discarded: nothing from it reaches `/api/logs` or `/api/tools`;
+- is left alone when MCP settings change or `/api/restart` is called.
+
+`/api/health` reports `notesWorker: { state, toolFree, port: 6273 }`. `toolFree`
+is true only if the harness launched the worker without MCP flags or
+`APFEL_MCP*` environment, the worker has never printed an MCP line, and `lsof`
+shows the harness's own child is the only listener on 6273 (a stray process that
+already held the port is not trusted). The route answers `503` whenever
+`toolFree` is false, and `403` to any request with an `Origin` header (Perci
+Notes calls from its Electron main process, which sends none). Perci Notes checks
+`toolFree` before every request.
 
 ## Security
 
@@ -91,6 +115,8 @@ browser can still reach loopback, it also checks every request:
   `/api/logs`, `/api/tools`, …) are refused with `403` when they carry an
   `Origin` other than the harness's own. `Origin: null` counts as foreign.
   Clients that send no `Origin` (Node, curl, the menu-bar app) are allowed.
+- **`/api/notes/chat`** refuses every request that carries an `Origin`,
+  including the harness's own.
 - **CORS** is sent only on `GET /api/health` and `GET /api/model`
   (`Access-Control-Allow-Origin: *`; neither holds secrets). Other routes send
   no CORS headers, and `OPTIONS` preflights get `403` there.
@@ -102,4 +128,6 @@ browser can still reach loopback, it also checks every request:
 
 ## Ports
 
-6271 (UI) and 6272 (`apfel --serve` child).
+6271 (UI), 6272 (shared `apfel --serve` child, MCP tools), and 6273 (tool-free
+`apfel --serve` child behind `/api/notes/chat`). Each apfel process uses about
+14 MB; the model itself runs in Apple's system service.
