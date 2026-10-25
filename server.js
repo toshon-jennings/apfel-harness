@@ -6,6 +6,7 @@
 // Ports (registered in ~/.config/agent-rules/PORTMASTER.md):
 //   6271  this harness (UI + /api/*)
 //   6272  apfel --serve child (apfel's default 11434 belongs to Ollama)
+//   6273  tool-free apfel --serve child for Perci Notes (/api/notes/chat)
 
 const http = require('http');
 const https = require('https');
@@ -36,6 +37,7 @@ const PORT = 6271;
 const HOST = '127.0.0.1';
 const UPSTREAM_PORT = 6272;
 const UPSTREAM_HOST = '127.0.0.1';
+const NOTES_PORT = 6273;
 const ROOT = __dirname;
 const CONFIG_PATH = path.join(ROOT, 'config.json');
 const VERSION = require('./package.json').version;
@@ -66,11 +68,9 @@ function saveConfig(cfg) {
 }
 
 // ---------- apfel --serve supervisor ----------
-let child = null;
-let childState = 'starting'; // starting | online | offline
-let restartDelay = 500;
+// One supervisor, two children: the shared worker (6272) runs the MCP tools
+// from config.json; the Notes worker (6273) is never given any MCP flags.
 let shuttingDown = false;
-let lastStart = 0;
 let mcpFallback = false; // true once a bad MCP config forced a no-tools restart
 let mcpError = null;
 let discoveredTools = []; // [{ server, name }] parsed from apfel's startup log
@@ -113,67 +113,109 @@ function parseApfelLine(l) {
   }
 }
 
-function startUpstream() {
-  if (shuttingDown) return;
-  childState = 'starting';
-  discoveredTools = []; // re-announced on every start
-  lastStart = Date.now();
-  const extra = mcpArgs();
-  child = spawn(APFEL_BIN, ['--serve', '--port', String(UPSTREAM_PORT), '--host', UPSTREAM_HOST, ...extra], {
-    stdio: ['ignore', 'pipe', 'pipe'],
-    env: CHILD_ENV,
-  });
-  const onData = (buf) =>
-    String(buf)
-      .split('\n')
-      .filter(Boolean)
-      .forEach((l) => { log(`[apfel] ${l}`); parseApfelLine(l); });
-  child.stdout.on('data', onData);
-  child.stderr.on('data', onData);
-  child.on('error', (err) => {
-    childState = 'offline';
-    log(`[harness] failed to spawn apfel: ${err.message}`);
-  });
-  child.on('exit', (code) => {
-    child = null;
+// Spawn `apfel --serve` on `port` with `flags()` and keep it alive: health-gated
+// "online", restart with backoff on exit. `onFastExit(extra)` may return true
+// to retry at once after a near-instant exit.
+function supervise(name, port, { flags, onLine, env = CHILD_ENV, onStart = () => {}, onFastExit = () => false }) {
+  const w = { port, env, state: 'starting', argv: [], child: null, restartDelay: 500 }; // state: starting | online | offline
+  w.start = () => {
     if (shuttingDown) return;
-    childState = 'offline';
-    // A near-instant exit while MCP flags were set means a bad server path —
-    // fall back to running WITHOUT tools so the harness stays usable.
-    if (Date.now() - lastStart < 2500 && extra.length && !mcpFallback) {
-      mcpFallback = true;
-      mcpError = 'apfel could not start with the configured MCP server(s); running without tools. Check each path exists and is executable.';
-      log('[harness] ' + mcpError);
-      return setTimeout(startUpstream, 300);
-    }
-    log(`[harness] apfel exited (code ${code}); restarting in ${restartDelay}ms`);
-    setTimeout(startUpstream, restartDelay);
-    restartDelay = Math.min(restartDelay * 2, 15000);
+    w.state = 'starting';
+    onStart();
+    const lastStart = Date.now();
+    const extra = flags();
+    w.argv = ['--serve', '--port', String(port), '--host', UPSTREAM_HOST, ...extra];
+    const child = (w.child = spawn(APFEL_BIN, w.argv, { stdio: ['ignore', 'pipe', 'pipe'], env }));
+    const onData = (buf) => String(buf).split('\n').filter(Boolean).forEach(onLine);
+    child.stdout.on('data', onData);
+    child.stderr.on('data', onData);
+    child.on('error', (err) => {
+      w.state = 'offline';
+      log(`[harness] failed to spawn ${name}: ${err.message}`);
+    });
+    child.on('exit', (code) => {
+      w.child = null;
+      if (shuttingDown) return;
+      w.state = 'offline';
+      if (Date.now() - lastStart < 2500 && onFastExit(extra)) return setTimeout(w.start, 300);
+      log(`[harness] ${name} exited (code ${code}); restarting in ${w.restartDelay}ms`);
+      setTimeout(w.start, w.restartDelay);
+      w.restartDelay = Math.min(w.restartDelay * 2, 15000);
+    });
+    // poll /health until the model is ready
+    const poll = setInterval(() => {
+      upstreamGet('/health', port)
+        .then(() => {
+          w.state = 'online';
+          w.restartDelay = 500;
+          clearInterval(poll);
+          log(`[harness] ${name} is online${extra.length ? ` with ${discoveredTools.length} tool(s)` : ''}`);
+        })
+        .catch(() => {});
+    }, 400);
+    setTimeout(() => clearInterval(poll), 20000);
+  };
+  // Restart cleanly (used when MCP config changes — --mcp is a startup flag).
+  w.restart = () => {
+    w.restartDelay = 500;
+    if (w.child) w.child.kill('SIGTERM'); // exit handler relaunches
+    else w.start();
+  };
+  return w;
+}
+
+const shared = supervise('apfel', UPSTREAM_PORT, {
+  flags: mcpArgs,
+  onStart: () => { discoveredTools = []; }, // re-announced on every start
+  onLine: (l) => { log(`[apfel] ${l}`); parseApfelLine(l); },
+  // A near-instant exit while MCP flags were set means a bad server path —
+  // fall back to running WITHOUT tools so the harness stays usable.
+  onFastExit: (extra) => {
+    if (!extra.length || mcpFallback) return false;
+    mcpFallback = true;
+    mcpError = 'apfel could not start with the configured MCP server(s); running without tools. Check each path exists and is executable.';
+    log('[harness] ' + mcpError);
+    return true;
+  },
+});
+
+// Perci Notes' worker. Whatever config.json says it gets no MCP flags, and no
+// APFEL_* environment (APFEL_MCP also attaches tools), so apfel has no tools to
+// run on note text. Its output is never logged (it could carry note text) and
+// never reaches recentToolCalls. If it prints an MCP line anyway (apfel 1.12:
+// "mcp: <path> - <tools>" at startup, "  • mcp tool: <name> ok …" per call),
+// /api/notes/chat refuses requests until the harness restarts.
+let notesUnsafe = false;
+const notes = supervise('apfel notes worker', NOTES_PORT, {
+  flags: () => [],
+  env: Object.fromEntries(Object.entries(CHILD_ENV).filter(([k]) => !k.startsWith('APFEL_'))),
+  onLine: (l) => {
+    if (notesUnsafe || !/^[\s•]*mcp( tool)?:/.test(l)) return;
+    notesUnsafe = true;
+    log('[harness] notes worker announced an MCP tool; /api/notes/chat now refuses requests');
+  },
+});
+// The Notes port must be held by our own child alone. If a stray process
+// already had it, our child could not bind and that process would answer instead.
+function notesOwnsPort() {
+  return new Promise((resolve) => {
+    const pid = notes.child && String(notes.child.pid);
+    if (!pid) return resolve(false);
+    execFile('/usr/sbin/lsof', ['-nP', '-t', `-iTCP:${NOTES_PORT}`, '-sTCP:LISTEN'], (err, out) => {
+      const pids = String(out || '').split('\n').filter(Boolean);
+      resolve(pids.length > 0 && pids.every((p) => p === pid));
+    });
   });
-  // poll /health until the model is ready
-  const poll = setInterval(() => {
-    upstreamGet('/health')
-      .then(() => {
-        childState = 'online';
-        restartDelay = 500;
-        clearInterval(poll);
-        log(`[harness] apfel is online${extra.length ? ` with ${discoveredTools.length} tool(s)` : ''}`);
-      })
-      .catch(() => {});
-  }, 400);
-  setTimeout(() => clearInterval(poll), 20000);
 }
+const notesToolFree = async () =>
+  !notesUnsafe &&
+  !notes.argv.some((a) => a.startsWith('--mcp')) &&
+  !Object.keys(notes.env).some((k) => k.startsWith('APFEL_MCP')) &&
+  (await notesOwnsPort());
 
-// Restart the child cleanly (used when MCP config changes — --mcp is a startup flag).
-function restartUpstream() {
-  restartDelay = 500;
-  if (child) child.kill('SIGTERM'); // exit handler relaunches
-  else startUpstream();
-}
-
-function upstreamGet(pathname) {
+function upstreamGet(pathname, port = UPSTREAM_PORT) {
   return new Promise((resolve, reject) => {
-    const req = http.get({ host: UPSTREAM_HOST, port: UPSTREAM_PORT, path: pathname, timeout: 3000 }, (res) => {
+    const req = http.get({ host: UPSTREAM_HOST, port, path: pathname, timeout: 3000 }, (res) => {
       let body = '';
       res.on('data', (c) => (body += c));
       res.on('end', () => {
@@ -232,20 +274,27 @@ function serveStatic(req, res, pathname) {
 }
 
 // ---------- API handlers ----------
-async function handleHealth(res) {
-  let upstream = null;
+// Ask a worker's own /health so its reported state is current.
+async function probe(w) {
   try {
-    upstream = await upstreamGet('/health');
-    childState = 'online';
+    const health = await upstreamGet('/health', w.port);
+    w.state = 'online';
+    return health;
   } catch {
-    if (childState === 'online') childState = 'offline';
+    if (w.state === 'online') w.state = 'offline';
+    return null;
   }
+}
+
+async function handleHealth(res) {
+  const [upstream] = await Promise.all([probe(shared), probe(notes)]);
   sendJSON(res, 200, {
     ok: true,
     service: 'apfel-harness',
     version: VERSION,
     url: `http://${HOST}:${PORT}`,
-    apfel: { state: childState, port: UPSTREAM_PORT, health: upstream },
+    apfel: { state: shared.state, port: UPSTREAM_PORT, health: upstream },
+    notesWorker: { state: notes.state, toolFree: await notesToolFree(), port: NOTES_PORT },
     mcp: { tools: discoveredTools.length, fallback: mcpFallback, error: mcpError },
     escalation: !!(loadConfig().escalation || {}).model,
   });
@@ -261,8 +310,8 @@ async function handleModel(res) {
 }
 
 // Proxy chat completions; streams SSE straight through so the UI can render
-// tokens as the on-device model produces them.
-async function handleChat(req, res) {
+// tokens as the on-device model produces them. Nothing here logs content.
+async function handleChat(req, res, port = UPSTREAM_PORT) {
   let payload;
   try {
     payload = JSON.parse(await readBody(req));
@@ -273,7 +322,7 @@ async function handleChat(req, res) {
   const upstreamReq = http.request(
     {
       host: UPSTREAM_HOST,
-      port: UPSTREAM_PORT,
+      port,
       path: '/v1/chat/completions',
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
@@ -293,6 +342,15 @@ async function handleChat(req, res) {
   });
   req.on('close', () => upstreamReq.destroy()); // stop generation when the client aborts
   upstreamReq.end(body);
+}
+
+// Perci Notes sends note text here, and it only ever reaches the tool-free
+// Notes worker. Notes calls from its Electron main process, which sends no
+// Origin, so any Origin (even this harness's own page) is refused.
+async function handleNotesChat(req, res) {
+  if (req.headers.origin !== undefined) return sendJSON(res, 403, { error: 'forbidden origin' });
+  if (!(await notesToolFree())) return sendJSON(res, 503, { error: 'the Notes worker is not tool-free; refusing note text' });
+  return handleChat(req, res, NOTES_PORT);
 }
 
 // Exact token count via the CLI tokenizer (no inference).
@@ -352,7 +410,7 @@ async function handleConfig(req, res) {
     if (mcpChanged) {
       mcpFallback = false;
       mcpError = null;
-      restartUpstream();
+      shared.restart(); // only the shared worker has MCP flags
     }
     sendJSON(res, 200, { ...publicConfig(cfg), restarting: mcpChanged });
   } catch (err) {
@@ -368,7 +426,7 @@ function handleTools(res) {
     recentCalls: recentToolCalls.slice(-15).reverse(),
     fallback: mcpFallback,
     error: mcpError,
-    state: childState,
+    state: shared.state,
   });
 }
 
@@ -431,7 +489,7 @@ function handleRestart(res) {
   log('[harness] restart requested from UI');
   mcpFallback = false;
   mcpError = null;
-  restartUpstream();
+  shared.restart();
   sendJSON(res, 200, { ok: true, state: 'starting' });
 }
 
@@ -492,6 +550,7 @@ const server = http.createServer(async (req, res) => {
     if (pathname === '/api/health') return await handleHealth(res);
     if (pathname === '/api/model') return await handleModel(res);
     if (pathname === '/api/chat' && req.method === 'POST') return await handleChat(req, res);
+    if (pathname === '/api/notes/chat' && req.method === 'POST') return await handleNotesChat(req, res);
     if (pathname === '/api/escalate' && req.method === 'POST') return await handleEscalate(req, res);
     if (pathname === '/api/count' && req.method === 'POST') return await handleCount(req, res);
     if (pathname === '/api/config') return await handleConfig(req, res);
@@ -507,7 +566,7 @@ const server = http.createServer(async (req, res) => {
 
 function shutdown() {
   shuttingDown = true;
-  if (child) child.kill('SIGTERM');
+  for (const w of [shared, notes]) if (w.child) w.child.kill('SIGTERM');
   server.close(() => process.exit(0));
   setTimeout(() => process.exit(0), 1500);
 }
@@ -516,5 +575,6 @@ process.on('SIGTERM', shutdown);
 
 server.listen(PORT, HOST, () => {
   log(`[harness] apfel-harness v${VERSION} on http://${HOST}:${PORT}`);
-  startUpstream();
+  shared.start();
+  notes.start();
 });
