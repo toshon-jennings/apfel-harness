@@ -208,8 +208,11 @@
         <input type="text" id="cfg-esc-model" class="mono" placeholder="e.g. llama-3.3-70b or gpt-4o">
       </label>
       <label class="field">
-        <span>API key <em class="mono">optional for local</em></span>
-        <input type="password" id="cfg-esc-key" class="mono" placeholder="sk-… (blank for LM Studio / Ollama)">
+        <span>API key <em class="mono" id="esc-key-state">optional for local</em></span>
+        <span class="key-row">
+          <input type="password" id="cfg-esc-key" class="mono" placeholder="sk-… (blank for LM Studio / Ollama)" autocomplete="off">
+          <button type="button" class="ghost" id="cfg-esc-key-clear" hidden>Clear</button>
+        </span>
       </label>
     </div>
   </aside>

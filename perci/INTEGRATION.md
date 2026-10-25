@@ -18,6 +18,13 @@ The harness also exposes `GET /api/health` returning
 `{ ok, version, apfel: { state } }` — use it for a status dot. `apfel.state` is
 `online` only when the on-device model itself is ready, not just the UI server.
 
+`/api/health` and `/api/model` are the only routes that send CORS headers
+(`Access-Control-Allow-Origin: *`), so the renderer can poll them from `file://`
+(`Origin: null`) or the Vite dev server. Every other `/api/*` call must be made
+from the embedded harness page itself (same origin), or from a client that sends
+no `Origin` header (e.g. Electron's main process via Node `http`). A cross-origin
+renderer request to them gets `403`. See the Security section of the README.
+
 ## Steps
 
 1. **Copy the component:** `perci/ApfelMode.jsx` → `~/opal/src/components/ApfelMode.jsx`.
