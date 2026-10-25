@@ -22,7 +22,7 @@ function applyTheme(mode) {
 let config = {
   systemPrompt: '', temperature: 0.7, topP: null, seed: null, maxTokens: 512,
   contextStrategy: 'newest-first', contextMaxTurns: 8, themeMode: 'system',
-  mcpServers: [], mcpTimeout: 5, escalation: { baseUrl: '', apiKey: '', model: '' },
+  mcpServers: [], mcpTimeout: 5, escalation: { baseUrl: '', model: '', apiKeySet: false },
 };
 let messages = []; // {role, content, tokens?}
 let attachments = []; // {name, content}
@@ -47,10 +47,10 @@ async function loadConfig() {
   $('cfg-seed').value = config.seed ?? '';
   $('cfg-strategy').value = config.contextStrategy;
   $('cfg-maxturns').value = config.contextMaxTurns;
-  config.escalation = config.escalation || { baseUrl: '', apiKey: '', model: '' };
+  config.escalation = config.escalation || { baseUrl: '', model: '', apiKeySet: false };
   $('cfg-esc-url').value = config.escalation.baseUrl || '';
   $('cfg-esc-model').value = config.escalation.model || '';
-  $('cfg-esc-key').value = config.escalation.apiKey || '';
+  reflectKeyState();
   reflectTuning();
   renderMcpList();
   applyTheme(params.get('theme') || config.themeMode);
@@ -654,7 +654,31 @@ async function escalate() {
 $('btn-escalate').onclick = escalate;
 $('cfg-esc-url').onchange = (e) => { config.escalation.baseUrl = e.target.value.trim(); saveConfig(); };
 $('cfg-esc-model').onchange = (e) => { config.escalation.model = e.target.value.trim(); saveConfig(); setTimeout(pollHealth, 200); };
-$('cfg-esc-key').onchange = (e) => { config.escalation.apiKey = e.target.value; saveConfig(); };
+// The server never returns the key — only `apiKeySet`. The field is write-only:
+// typing a key saves it, leaving it blank keeps the stored one, Clear removes it.
+function reflectKeyState() {
+  const set = !!config.escalation.apiKeySet;
+  $('cfg-esc-key').value = '';
+  $('cfg-esc-key').placeholder = set ? '•••••••• saved — type to replace' : 'sk-… (blank for LM Studio / Ollama)';
+  $('esc-key-state').textContent = set ? 'saved' : 'optional for local';
+  $('cfg-esc-key-clear').hidden = !set;
+}
+$('cfg-esc-key').onchange = async (e) => {
+  const key = e.target.value.trim();
+  if (!key) return;
+  config.escalation.apiKey = key;
+  const r = await saveConfigNow();
+  delete config.escalation.apiKey; // don't keep the secret around in page state
+  if (r && r.escalation) config.escalation.apiKeySet = !!r.escalation.apiKeySet;
+  reflectKeyState();
+};
+$('cfg-esc-key-clear').onclick = async () => {
+  try {
+    const r = await (await fetch('/api/config', { method: 'POST', body: JSON.stringify({ escalation: { clearApiKey: true } }) })).json();
+    if (r && r.escalation) config.escalation.apiKeySet = !!r.escalation.apiKeySet;
+  } catch { /* leave the state as it was */ }
+  reflectKeyState();
+};
 
 // ---------- MCP tools (feature 1) ----------
 let toolsByServer = {}; // server path -> [tool names], from /api/tools

@@ -77,8 +77,28 @@ For live web search, follow [`examples/searxng/README.md`](examples/searxng/READ
 
 `/api/health` · `/api/model` · `/api/chat` (SSE proxy) · `/api/escalate` (SSE
 proxy to the bigger model) · `/api/count` (exact tokens) · `/api/config`
-(GET/POST; MCP changes restart the child) · `/api/tools` (discovered MCP tools +
+(GET/POST; MCP changes restart the child; the API key is never returned) · `/api/tools` (discovered MCP tools +
 recent calls) · `/api/restart` · `/api/logs`.
+
+## Security
+
+The harness binds to `127.0.0.1` only, and because any web page in your
+browser can still reach loopback, it also checks every request:
+
+- **Host** must be `127.0.0.1:6271` or `localhost:6271`, otherwise `403`
+  (blocks DNS rebinding).
+- **Writes and sensitive reads** (every non-GET, plus `/api/config`,
+  `/api/logs`, `/api/tools`, …) are refused with `403` when they carry an
+  `Origin` other than the harness's own. `Origin: null` counts as foreign.
+  Clients that send no `Origin` (Node, curl, the menu-bar app) are allowed.
+- **CORS** is sent only on `GET /api/health` and `GET /api/model`
+  (`Access-Control-Allow-Origin: *`; neither holds secrets). Other routes send
+  no CORS headers, and `OPTIONS` preflights get `403` there.
+- **The escalation API key is write-only.** `GET /api/config` returns
+  `escalation.apiKeySet: true|false`, never the key. On `POST /api/config`, an
+  empty or missing `escalation.apiKey` keeps the stored key, and
+  `escalation.clearApiKey: true` removes it. It is stored in plain text in
+  `config.json`, which is git-ignored.
 
 ## Ports
 

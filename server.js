@@ -317,11 +317,33 @@ async function handleCount(req, res) {
   cp.stdin.end(); // apfel blocks reading stdin without a TTY — close it so it returns immediately
 }
 
+// The escalation key never leaves the server: clients only learn whether one is set.
+function publicConfig(cfg) {
+  const { apiKey, ...esc } = cfg.escalation || {};
+  return { ...cfg, escalation: { ...esc, apiKeySet: !!apiKey } };
+}
+
+// An empty or missing apiKey keeps the stored one (the UI never has it to send
+// back); `clearApiKey: true` is the only way to remove it.
+function mergeEscalation(prev, next) {
+  prev = prev || {};
+  if (!next || typeof next !== 'object') return prev;
+  const { apiKey, apiKeySet, clearApiKey, ...rest } = next;
+  const merged = { ...prev, ...rest };
+  if (clearApiKey === true) merged.apiKey = '';
+  else if (typeof apiKey === 'string' && apiKey.trim()) merged.apiKey = apiKey.trim();
+  else merged.apiKey = prev.apiKey || '';
+  return merged;
+}
+
 async function handleConfig(req, res) {
-  if (req.method === 'GET') return sendJSON(res, 200, loadConfig());
+  if (req.method === 'GET') return sendJSON(res, 200, publicConfig(loadConfig()));
   try {
     const before = loadConfig();
-    const cfg = { ...before, ...JSON.parse(await readBody(req)) };
+    const incoming = JSON.parse(await readBody(req));
+    if (!incoming || typeof incoming !== 'object' || Array.isArray(incoming)) throw new Error('expected a JSON object');
+    const cfg = { ...before, ...incoming, escalation: mergeEscalation(before.escalation, incoming.escalation) };
+    delete cfg.restarting; // response-only flag; don't persist it if a client echoes it back
     saveConfig(cfg);
     // --mcp is a startup flag, so any change to the MCP set needs a child restart.
     const mcpChanged =
@@ -332,7 +354,7 @@ async function handleConfig(req, res) {
       mcpError = null;
       restartUpstream();
     }
-    sendJSON(res, 200, { ...cfg, restarting: mcpChanged });
+    sendJSON(res, 200, { ...publicConfig(cfg), restarting: mcpChanged });
   } catch (err) {
     sendJSON(res, 400, { error: `bad config: ${err.message}` });
   }
@@ -413,17 +435,59 @@ function handleRestart(res) {
   sendJSON(res, 200, { ok: true, state: 'starting' });
 }
 
+// ---------- request guard ----------
+// The harness binds to loopback, but any page open in the user's browser can
+// still reach it. So: only answer to our own Host (defeats DNS rebinding), only
+// accept state-changing or sensitive requests from our own origin, and only
+// hand out CORS on the read-only status routes Perci polls.
+const ALLOWED_HOSTS = new Set([`127.0.0.1:${PORT}`, `localhost:${PORT}`]);
+const SELF_ORIGINS = new Set([`http://127.0.0.1:${PORT}`, `http://localhost:${PORT}`]);
+const CORS_ROUTES = new Set(['/api/health', '/api/model']); // no secrets; Perci's renderer (Origin "null" / :5173) reads health
+
+// Returns true if the request was rejected (response already sent).
+function guard(req, res, pathname) {
+  const host = String(req.headers.host || '').toLowerCase();
+  if (!ALLOWED_HOSTS.has(host)) {
+    sendJSON(res, 403, { error: 'forbidden host' });
+    return true;
+  }
+  const readOnly = req.method === 'GET' || req.method === 'HEAD';
+  if (req.method === 'OPTIONS') {
+    if (!CORS_ROUTES.has(pathname)) {
+      sendJSON(res, 403, { error: 'forbidden' });
+      return true;
+    }
+    res.writeHead(204, {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+      'Access-Control-Max-Age': '600',
+    });
+    res.end();
+    return true;
+  }
+  // Writes, and every /api/* read except the public status routes (config,
+  // logs, tools, …), must come from our own page. No Origin = a non-browser
+  // client (Node, curl, URLSession) and is allowed; "null" counts as foreign.
+  const sensitive = !readOnly || (pathname.startsWith('/api/') && !CORS_ROUTES.has(pathname));
+  const origin = req.headers.origin;
+  if (sensitive && origin !== undefined && !SELF_ORIGINS.has(String(origin).toLowerCase())) {
+    sendJSON(res, 403, { error: 'forbidden origin' });
+    return true;
+  }
+  if (readOnly && CORS_ROUTES.has(pathname)) res.setHeader('Access-Control-Allow-Origin', '*');
+  return false;
+}
+
 // ---------- server ----------
 const server = http.createServer(async (req, res) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, PATCH, DELETE');
-  res.setHeader('Access-Control-Allow-Headers', 'X-Requested-With,Content-Type,Authorization');
-  if (req.method === 'OPTIONS') {
-    res.writeHead(204);
-    res.end();
-    return;
+  let pathname;
+  try {
+    pathname = new URL(req.url, `http://${HOST}:${PORT}`).pathname;
+  } catch {
+    return sendJSON(res, 400, { error: 'bad request' });
   }
-  const { pathname } = new URL(req.url, `http://${HOST}:${PORT}`);
+  if (guard(req, res, pathname)) return;
   try {
     if (pathname === '/api/health') return await handleHealth(res);
     if (pathname === '/api/model') return await handleModel(res);
